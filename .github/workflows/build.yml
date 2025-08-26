@@ -29,6 +29,13 @@ jobs:
         with:
           name: dist
           path: dist
+      - name: Package archives
+        run: |
+          VERSION=${GITHUB_REF_NAME}
+          [ -z "$VERSION" ] && VERSION=dev
+          tar -C dist -czf backpackpi-${VERSION}.tar.gz .
+          zip -q -r backpackpi-${VERSION}.zip dist
+          sha256sum backpackpi-${VERSION}.tar.gz backpackpi-${VERSION}.zip > SHA256SUMS
       - name: Verify dist
         if: startsWith(github.ref, 'refs/tags/')
         run: test -d dist || (echo 'dist missing' && exit 1)
@@ -36,6 +43,9 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/**
+          files: |
+            backpackpi-${{ github.ref_name }}.tar.gz
+            backpackpi-${{ github.ref_name }}.zip
+            SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
