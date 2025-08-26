@@ -8,4 +8,4 @@ export function pushToast(msg, opts={}){
   root.appendChild(el);
   setTimeout(()=> { el.style.opacity='0'; el.addEventListener('transitionend', ()=> el.remove(), { once:true }); }, opts.ttl || 4000);
 }
-window.pushToast = pushToast; // dev convenience
+window.pushToast = pushToast; 
