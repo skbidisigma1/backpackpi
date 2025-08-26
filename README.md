@@ -42,12 +42,33 @@ Example endpoints (to implement separately):
 Add a new module file in `js/modules/` exporting `render(root)` and extend conditional import block in `app.js` (or refactor to a registry map).
 
 ## Development
+
 Serve the `frontend/` directory with a static server so SW + modules function:
-```
+
+```bash
 # Example (Python 3)
 python -m http.server 8000 -d frontend
 ```
+
 Navigate to: http://localhost:8000/
+
+## Build / Release (CI)
+
+Node-based build pipeline (esbuild + csso + html-minifier) produces a `dist/` folder:
+
+```bash
+npm install
+npm run build
+```
+
+GitHub Actions workflow builds on every push to `main` and when a tag matching `v*` is pushed it will create a GitHub Release attaching the minified `dist` artifact. To publish a new release locally:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow then minifies assets and uploads them to the release automatically.
 
 ## Theming
 Toggle uses localStorage `theme`. Add more theme variables by extending `:root` and `[data-theme=dark]` sections.
