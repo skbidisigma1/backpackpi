@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir, cp } from 'fs/promises';
 import { minify as htmlMinify } from 'html-minifier-terser';
 import esbuild from 'esbuild';
-import csso from 'csso';
+import * as csso from 'csso';
 import path from 'path';
 
 const root = path.resolve('./');
