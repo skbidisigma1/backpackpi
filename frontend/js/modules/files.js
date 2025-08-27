@@ -19,8 +19,14 @@ async function fetchList(){
   const url = `/api/files?path=${encodeURIComponent(state.path)}${state.showHidden?'&showHidden=1':''}`;
   try {
     const res = await fetch(url);
-    if (!res.ok) throw new Error('Failed to load');
-    const data = await res.json();
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const ct = res.headers.get('Content-Type') || '';
+    if (!ct.includes('application/json')){
+      const text = await res.text();
+      console.error('Non-JSON response for', url, 'first 200 chars =>', text.slice(0,200));
+      throw new Error('Unexpected non-JSON response (are you hitting the backend server?)');
+    }
+    const data = await res.json(); // safe now
     state.path = data.path;
     state.entries = data.entries.sort((a,b)=> (a.type===b.type? a.name.localeCompare(b.name): a.type==='dir'?-1:1));
     state.selection.clear();

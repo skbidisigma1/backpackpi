@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import filesRouter from './routes/files.js';
 
@@ -25,8 +26,13 @@ app.use((req,res,next)=>{
 // API routes
 app.use('/api/files', filesRouter);
 
-// Static frontend (dev convenience)
-app.use('/', express.static(path.join(process.cwd(), 'frontend')));
+// Static frontend: prefer built dist if present, else raw frontend
+const distDir = path.join(process.cwd(), 'dist');
+app.use('/', express.static(fsExistsDir(distDir) ? distDir : path.join(process.cwd(), 'frontend')));
+
+function fsExistsDir(p){
+  try { return fs.statSync(p).isDirectory(); } catch { return false; }
+}
 
 // Error handler fallback
 // eslint-disable-next-line no-unused-vars
