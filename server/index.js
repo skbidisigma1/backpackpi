@@ -1,0 +1,42 @@
+import express from 'express';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import filesRouter from './routes/files.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+app.use(express.json({ limit: '2mb' }));
+
+// Configurable root directory for file browser
+const ROOT_DIR = process.env.FILE_ROOT || path.resolve(process.cwd());
+app.set('FILE_ROOT', ROOT_DIR);
+
+// CORS simple allow same-origin / local network (adjust if needed)
+app.use((req,res,next)=>{
+  res.setHeader('Access-Control-Allow-Origin','*');
+  res.setHeader('Access-Control-Allow-Methods','GET,POST,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers','Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(204);
+  next();
+});
+
+// API routes
+app.use('/api/files', filesRouter);
+
+// Static frontend (dev convenience)
+app.use('/', express.static(path.join(process.cwd(), 'frontend')));
+
+// Error handler fallback
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error('ERR', err);
+  res.status(err.status || 500).json({ error: err.publicMessage || 'Server error' });
+});
+
+const port = process.env.PORT || 3000;
+app.listen(port, () => {
+  console.log(`Backpack Pi server listening on :${port}`);
+  console.log('File root:', ROOT_DIR);
+});

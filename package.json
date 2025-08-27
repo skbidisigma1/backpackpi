@@ -6,7 +6,13 @@
   "scripts": {
     "build": "node build.js",
     "clean": "rimraf dist || rd /s /q dist",
+    "serve": "node server/index.js",
+    "dev": "node server/index.js",
     "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mime-types": "^2.1.35"
   },
   "devDependencies": {
     "csso": "^5.0.5",
