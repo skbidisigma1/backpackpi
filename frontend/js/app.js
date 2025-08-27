@@ -57,11 +57,45 @@ navItems.addEventListener('click', e => {
 // Initial view
 loadView('dashboard');
 
-// Expose API base (supports hosting frontend from a different origin than backend)
-// Priority: window.API_BASE (pre-set), or same-origin '', or if served from file:// require manual set.
-const inferredApi = (typeof window !== 'undefined' && window.API_BASE) ? window.API_BASE : '';
-window.API_BASE = inferredApi; // ensure global
-console.log('[app] API_BASE =', window.API_BASE || '(same-origin)');
+// Expose / detect API base (supports separate backend host/port)
+// Resolution order:
+// 1. Pre-set window.API_BASE (e.g. injected script tag)
+// 2. If page served without an explicit port (80/443) assume backend at :3000 on same host
+// 3. Fallback: same-origin ''
+(function(){
+  if (typeof window === 'undefined') return;
+  if (!window.API_BASE) {
+    const loc = window.location;
+    const port = loc.port;
+    if (!port || port === '80' || port === '443') {
+      // Assume backend on 3000 unless overridden
+      window.API_BASE = `${loc.protocol}//${loc.hostname}:3000`;
+    } else {
+      window.API_BASE = '';
+    }
+  }
+  console.log('[app] API_BASE (initial) =', window.API_BASE || '(same-origin)');
+  // Light async health probe to detect wrong assumption
+  (async () => {
+    try {
+      const url = (window.API_BASE||'') + '/api/health';
+      const ctrl = new AbortController();
+      const t = setTimeout(()=> ctrl.abort(), 2500);
+      const res = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(t);
+      const ct = res.headers.get('content-type')||'';
+      if (!res.ok || !ct.includes('application/json')) throw new Error('Unexpected response');
+      console.log('[app] Backend health OK');
+    } catch (e){
+      console.warn('[app] Backend health probe failed for', window.API_BASE, e.message);
+      // If we assumed :3000 but failed, fall back to same-origin (maybe backend is reverse proxied)
+      if (window.API_BASE && /:3000$/.test(window.API_BASE)) {
+        window.API_BASE = '';
+        console.warn('[app] Falling back to same-origin API_BASE = (same-origin)');
+      }
+    }
+  })();
+})();
 
 // Service worker registration
 if ('serviceWorker' in navigator) {

@@ -34,6 +34,7 @@ async function fetchList(){
   } catch (e){
     console.error(e);
     window.pushToast?.('File list error',{ variant:'danger'});
+    maybeShowApiWarning(e);
   } finally {
     state.loading = false; renderTable(); renderBreadcrumb(); updateToolbar();
   }
@@ -130,6 +131,12 @@ export async function render(root){
   root.innerHTML = `
   <section class="stack">
     <h1 class="route-heading">Files</h1>
+    <div class="card" style="display:none;" data-api-warning>
+      <strong>Backend unreachable</strong>
+      <p style="margin-top:var(--space-2); font-size:.9rem; line-height:1.4">The files API responded with HTML instead of JSON.<br>
+      Verify the Node server is running and accessible at <code>${(window.API_BASE||'(same-origin)')||''}</code>.<br>
+      If the backend uses a different host/port, inject <code>&lt;script&gt;window.API_BASE='http://host:port'&lt;/script&gt;</code> before <code>app.js</code>.</p>
+    </div>
     <div class="card" id="file-browser">
       <div class="row" style="justify-content:space-between; align-items:center; gap:var(--space-4); flex-wrap:wrap;">
         <div class="cluster" data-breadcrumb></div>
@@ -165,4 +172,10 @@ export async function render(root){
   // Persist last path
   const last = localStorage.getItem('files.lastPath'); if (last) state.path = last;
   fetchList().then(()=> localStorage.setItem('files.lastPath', state.path));
+}
+
+function maybeShowApiWarning(err){
+  const warn = rootEl?.parentElement?.querySelector('[data-api-warning]');
+  if (!warn) return;
+  if (/Unexpected non-JSON/.test(err?.message||'')) warn.style.display='block';
 }
