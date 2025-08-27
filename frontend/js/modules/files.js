@@ -16,7 +16,8 @@ function fmtSize(bytes){
 
 async function fetchList(){
   state.loading = true; renderTable();
-  const url = `/api/files?path=${encodeURIComponent(state.path)}${state.showHidden?'&showHidden=1':''}`;
+  const base = window.API_BASE || '';
+  const url = `${base}/api/files?path=${encodeURIComponent(state.path)}${state.showHidden?'&showHidden=1':''}`;
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -24,7 +25,7 @@ async function fetchList(){
     if (!ct.includes('application/json')){
       const text = await res.text();
       console.error('Non-JSON response for', url, 'first 200 chars =>', text.slice(0,200));
-      throw new Error('Unexpected non-JSON response (are you hitting the backend server?)');
+  throw new Error('Unexpected non-JSON response. Ensure backend reachable at ' + (base||'(same origin)'));
     }
     const data = await res.json(); // safe now
     state.path = data.path;

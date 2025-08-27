@@ -57,6 +57,12 @@ navItems.addEventListener('click', e => {
 // Initial view
 loadView('dashboard');
 
+// Expose API base (supports hosting frontend from a different origin than backend)
+// Priority: window.API_BASE (pre-set), or same-origin '', or if served from file:// require manual set.
+const inferredApi = (typeof window !== 'undefined' && window.API_BASE) ? window.API_BASE : '';
+window.API_BASE = inferredApi; // ensure global
+console.log('[app] API_BASE =', window.API_BASE || '(same-origin)');
+
 // Service worker registration
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

@@ -26,6 +26,14 @@ app.use((req,res,next)=>{
 // API routes
 app.use('/api/files', filesRouter);
 
+app.get('/api/health', (req,res)=>{ res.json({ ok:true, time: Date.now() }); });
+
+// API 404 handler (before static) for clarity if wrong host
+app.use('/api', (req,res,next)=>{
+  if (req.path === '/' || req.path === '') return next();
+  if (!res.headersSent) res.status(404).json({ error:'API route not found', path:req.originalUrl });
+});
+
 // Static frontend: prefer built dist if present, else raw frontend
 const distDir = path.join(process.cwd(), 'dist');
 app.use('/', express.static(fsExistsDir(distDir) ? distDir : path.join(process.cwd(), 'frontend')));
