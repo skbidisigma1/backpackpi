@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, cp } from 'fs/promises';
+import { readFile, writeFile, mkdir, cp, rm, stat } from 'fs/promises';
 import { minify as htmlMinify } from 'html-minifier-terser';
 import esbuild from 'esbuild';
 import * as csso from 'csso';
@@ -29,27 +29,29 @@ async function buildJS(){
     target: 'es2020',
     outfile: path.join(dist, 'js/app.js')
   });
-  // Copy sw.js (minify separately)
   await esbuild.build({ entryPoints: ['frontend/sw.js'], minify: true, bundle: false, outfile: path.join(dist, 'sw.js'), format:'esm' });
 }
 
 async function buildHTML(){
   const htmlPath = path.join(root, 'frontend/index.html');
   let html = await readFile(htmlPath, 'utf8');
-  // Adjust asset paths for dist root usage
   html = html.replace('./assets/styles.css', './assets/styles.css');
   html = html.replace('./js/app.js', './js/app.js');
-  // Minify
   const minified = await htmlMinify(html, { collapseWhitespace:true, removeComments:true, minifyCSS:false, minifyJS:false });
   await writeFile(path.join(dist, 'index.html'), minified, 'utf8');
 }
 
 async function copyStatic(){
-  // Copy font
-  await cp('frontend/assets/fonts', path.join(dist, 'assets/fonts'), { recursive: true });
+  const srcDir = path.join('frontend','assets','fonts');
+  const destDir = path.join(dist,'assets','fonts');
+  // Ensure destination exists; if it already exists, just copy files inside.
+  await ensureDir(destDir);
+  await cp(srcDir, destDir, { recursive: true, force: true });
 }
 
 async function run(){
+  // Clean dist if it exists to guarantee fresh build
+  try { await stat(dist); await rm(dist, { recursive: true, force: true }); } catch {/* ignore */}
   await ensureDir(dist);
   await Promise.all([
     buildCSS(),
