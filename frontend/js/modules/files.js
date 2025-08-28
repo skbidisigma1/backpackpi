@@ -89,6 +89,7 @@ function downloadSelected(){
 }
 
 let rootEl; let tableBody; let breadcrumbEl; let toolbarEl;
+let editorWrap; let editorTextarea; let editorPathSpan; let editorStatus;
 
 function renderBreadcrumb(){
   if (!breadcrumbEl) return;
@@ -119,12 +120,50 @@ function renderTable(){
     tr.addEventListener('click', e=>{
       const name = tr.getAttribute('data-name');
       if (e.detail===2){ // double click -> navigate
-        const entry = state.entries.find(en=>en.name===name); navTo(entry); return;
+        const entry = state.entries.find(en=>en.name===name);
+        if (entry.type==='dir') { navTo(entry); return; }
+        openFile(entry.name);
+        return;
       }
       if (state.selection.has(name)) state.selection.delete(name); else state.selection.add(name);
       renderTable(); updateToolbar();
     });
   });
+}
+
+async function openFile(name){
+  const rel = (state.path==='/'? '' : state.path) + '/' + name;
+  const base = window.API_BASE || '';
+  editorStatus.textContent = 'Loading...';
+  editorWrap.style.display='block';
+  editorTextarea.disabled = true;
+  try {
+    const res = await fetch(`${base}/api/files/content?path=${encodeURIComponent(rel)}`);
+    if (!res.ok){ editorStatus.textContent = 'Error '+res.status; return; }
+    const data = await res.json();
+    if (data.binary){ editorStatus.textContent = 'Binary file (view not supported)'; editorTextarea.value=''; editorTextarea.disabled=true; }
+    else {
+      editorPathSpan.textContent = data.path;
+      editorTextarea.value = data.content;
+      editorTextarea.disabled = false;
+      editorTextarea.dataset.path = data.path;
+      editorStatus.textContent = `Size ${fmtSize(data.size)}`;
+    }
+  } catch (e){ editorStatus.textContent = 'Load failed'; }
+}
+
+async function saveFile(){
+  const rel = editorTextarea.dataset.path; if (!rel) return;
+  editorStatus.textContent = 'Saving...';
+  const base = window.API_BASE || '';
+  try {
+    const res = await fetch(`${base}/api/files/write`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: rel, content: editorTextarea.value }) });
+    if (!res.ok){ editorStatus.textContent = 'Save failed ('+res.status+')'; return; }
+    const data = await res.json();
+    editorStatus.textContent = 'Saved ('+fmtSize(data.size)+')';
+    // Refresh listing to update mtime/size
+    fetchList();
+  } catch (e){ editorStatus.textContent = 'Save error'; }
 }
 
 export async function render(root){
@@ -154,6 +193,19 @@ export async function render(root){
           <tbody></tbody>
         </table>
       </div>
+      <div class="stack" style="margin-top:var(--space-4);">
+        <div class="card" data-editor style="display:none;">
+          <div class="row" style="justify-content:space-between; align-items:center;">
+            <strong data-editor-path></strong>
+            <div class="cluster" style="gap:var(--space-2);">
+              <span class="text-dim" data-editor-status></span>
+              <button class="btn" data-editor-save>Save</button>
+              <button class="btn-ghost btn" data-editor-close>Close</button>
+            </div>
+          </div>
+          <textarea data-editor-text style="width:100%; min-height:200px; font-family:var(--font-mono, monospace); font-size:.85rem; line-height:1.4; background:var(--c-bg-alt); color:inherit; border:1px solid var(--c-border); border-radius:var(--radius-sm); padding:var(--space-3); resize:vertical;"></textarea>
+        </div>
+      </div>
     </div>
   </section>`;
   rootEl = root.querySelector('#file-browser');
@@ -172,6 +224,13 @@ export async function render(root){
   // Persist last path
   const last = localStorage.getItem('files.lastPath'); if (last) state.path = last;
   fetchList().then(()=> localStorage.setItem('files.lastPath', state.path));
+
+  editorWrap = root.querySelector('[data-editor]');
+  editorTextarea = root.querySelector('[data-editor-text]');
+  editorPathSpan = root.querySelector('[data-editor-path]');
+  editorStatus = root.querySelector('[data-editor-status]');
+  editorWrap.querySelector('[data-editor-save]').addEventListener('click', saveFile);
+  editorWrap.querySelector('[data-editor-close]').addEventListener('click', ()=>{ editorWrap.style.display='none'; editorTextarea.value=''; editorTextarea.dataset.path=''; });
 }
 
 function maybeShowApiWarning(err){
