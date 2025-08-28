@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import filesRouter from './routes/files.js';
+import { readFileSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,44 +28,22 @@ app.use((req,res,next)=>{
 app.use('/api/files', filesRouter);
 
 app.get('/api/health', (req,res)=>{ res.json({ ok:true, time: Date.now() }); });
-
-// Version & route debug helpers
-let PKG_VERSION = null;
-try {
-  const pkgRaw = fs.readFileSync(path.join(process.cwd(), 'package.json'),'utf8');
-  PKG_VERSION = JSON.parse(pkgRaw).version || null;
-} catch {}
-
 app.get('/api/version', (req,res)=>{
-  res.json({ version: PKG_VERSION, time: Date.now(), fileRoot: app.get('FILE_ROOT') });
-});
-
-app.get('/api/_debug/routes', (req,res)=>{
-  const out = [];
-  function collect(stack, prefix=''){
-    stack.forEach(layer => {
-      if (layer.route) {
-        const methods = Object.keys(layer.route.methods);
-        out.push({ path: prefix + layer.route.path, methods });
-      } else if (layer.name === 'router' && layer.handle?.stack) {
-        // Attempt to derive mount path fragment from regexp (best-effort)
-        let mount = '';
-        if (layer.regexp && layer.regexp.source){
-          const m = layer.regexp.source.match(/\\\/api\\\/[^\\^]+/); // crude extract
-          if (m) mount = m[0].replace(/\\\\/g,'/');
-        }
-        collect(layer.handle.stack, mount);
-      }
-    });
-  }
-  collect(app._router.stack);
-  res.json(out);
+  let version = 'unknown';
+  try {
+    const pkg = JSON.parse(readFileSync(path.join(process.cwd(),'package.json'),'utf8'));
+    version = pkg.version || version;
+  } catch {}
+  res.json({ version });
 });
 
 // API 404 handler (before static) for clarity if wrong host
 app.use('/api', (req,res,next)=>{
   if (req.path === '/' || req.path === '') return next();
-  if (!res.headersSent) res.status(404).json({ error:'API route not found', path:req.originalUrl });
+  if (!res.headersSent) {
+    console.warn('[api-404]', req.method, req.originalUrl);
+    res.status(404).json({ error:'API route not found', path:req.originalUrl });
+  }
 });
 
 // Static frontend: prefer built dist if present, else raw frontend
@@ -86,4 +65,8 @@ const port = process.env.PORT || 3000;
 app.listen(port, () => {
   console.log(`Backpack Pi server listening on :${port}`);
   console.log('File root:', ROOT_DIR);
+  try {
+    const pkg = JSON.parse(readFileSync(path.join(process.cwd(),'package.json'),'utf8'));
+    console.log('Version:', pkg.version || 'unknown');
+  } catch {}
 });

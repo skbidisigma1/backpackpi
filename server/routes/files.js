@@ -113,7 +113,9 @@ router.delete('/', async (req,res,next)=>{
 router.get('/content', async (req,res,next)=>{
   try {
     const rel = req.query.path; if (!rel) return res.status(400).json({ error:'Missing path'});
-    const abs = safeJoin(getRoot(req), rel);
+    const root = getRoot(req);
+    const abs = safeJoin(root, rel);
+    console.log('[files:content]', { rel, abs, root });
     const stat = await fs.stat(abs);
     if (stat.isDirectory()) return res.status(400).json({ error:'Is directory'});
     if (stat.size > MAX_EDIT_SIZE) return res.status(413).json({ error:'File too large', size: stat.size, limit: MAX_EDIT_SIZE });
