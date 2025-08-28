@@ -23,6 +23,14 @@ const router = Router();
 
 function getRoot(req){ return req.app.get('FILE_ROOT'); }
 
+// Debug logging middleware (can be disabled later with env flag)
+router.use((req,res,next)=>{
+  if (process.env.DEBUG_FILES || true) { // always on for now
+    console.log('[files]', req.method, req.originalUrl, req.query);
+  }
+  next();
+});
+
 router.get('/', async (req,res,next)=>{
   try {
     const rel = (req.query.path || '/');
@@ -130,6 +138,20 @@ router.post('/write', async (req,res,next)=>{
     const newStat = await fs.stat(abs);
     res.json({ ok:true, size:newStat.size, mtime: Math.floor(newStat.mtimeMs/1000) });
   } catch (e){ next(e); }
+});
+
+// Debug: resolve a path without reading (helps diagnose 404)
+router.get('/debug/resolve', (req,res)=>{
+  const rel = req.query.path || '/';
+  try {
+    const root = getRoot(req);
+    const abs = safeJoin(root, rel);
+    fs.stat(abs).then(stat=>{
+      res.json({ path: rel, abs, exists:true, isDir: stat.isDirectory(), size: stat.size });
+    }).catch(()=> res.json({ path: rel, abs, exists:false }));
+  } catch (e){
+    res.status(400).json({ error:e.publicMessage||e.message });
+  }
 });
 
 export default router;

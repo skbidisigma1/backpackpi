@@ -66,7 +66,21 @@ async function rename(){
 }
 
 async function del(){
-  if (!state.selection.size) return;
+    if (!res.ok){
+      let msg = 'Error '+res.status;
+      try { msg += ' ' + (await res.json()).error; } catch {}
+      editorStatus.textContent = msg;
+      if (res.status === 404){
+        // Perform debug resolve
+        try {
+          const dbgRes = await fetch(`${base}/api/files/debug/resolve?path=${encodeURIComponent(rel)}`);
+          const dbg = await dbgRes.json();
+          console.warn('[file-debug]', dbg);
+          window.pushToast?.('Debug: ' + JSON.stringify(dbg), { variant:'danger'});
+        } catch(e){ console.warn('debug resolve failed', e); }
+      }
+      return;
+    }
   if (!confirm(`Delete ${state.selection.size} item(s)?`)) return;
   for (const name of state.selection){
     const rel = (state.path==='/'? '' : state.path) + '/' + name;
