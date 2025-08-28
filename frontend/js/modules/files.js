@@ -50,7 +50,8 @@ function navTo(entry){
 async function mkdir(){
   const name = prompt('New folder name');
   if (!name) return;
-  const res = await fetch('/api/files/mkdir',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: state.path, name }) });
+  const base = window.API_BASE || '';
+  const res = await fetch(`${base}/api/files/mkdir`,{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: state.path, name }) });
   if (res.ok) { fetchList(); } else window.pushToast?.('mkdir failed',{variant:'danger'});
 }
 
@@ -59,7 +60,8 @@ async function rename(){
   const entry = state.entries.find(e=> state.selection.has(e.name));
   const newName = prompt('Rename to', entry.name); if (!newName || newName===entry.name) return;
   const rel = (state.path==='/'? '' : state.path) + '/' + entry.name;
-  const res = await fetch('/api/files/rename',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: rel, newName }) });
+  const base = window.API_BASE || '';
+  const res = await fetch(`${base}/api/files/rename`,{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: rel, newName }) });
   if (res.ok) fetchList(); else window.pushToast?.('rename failed',{variant:'danger'});
 }
 
@@ -68,7 +70,8 @@ async function del(){
   if (!confirm(`Delete ${state.selection.size} item(s)?`)) return;
   for (const name of state.selection){
     const rel = (state.path==='/'? '' : state.path) + '/' + name;
-    await fetch(`/api/files?path=${encodeURIComponent(rel)}`, { method:'DELETE' });
+    const base = window.API_BASE || '';
+    await fetch(`${base}/api/files?path=${encodeURIComponent(rel)}`, { method:'DELETE' });
   }
   fetchList();
 }
@@ -81,7 +84,8 @@ function downloadSelected(){
     if (entry?.type==='file'){
       const rel = (state.path==='/'? '' : state.path) + '/' + entry.name;
       const a = document.createElement('a');
-      a.href = `/api/files/download?path=${encodeURIComponent(rel)}`;
+      const base = window.API_BASE || '';
+      a.href = `${base}/api/files/download?path=${encodeURIComponent(rel)}`;
       a.download = entry.name;
       document.body.appendChild(a); a.click(); a.remove();
     }
@@ -139,7 +143,12 @@ async function openFile(name){
   editorTextarea.disabled = true;
   try {
     const res = await fetch(`${base}/api/files/content?path=${encodeURIComponent(rel)}`);
-    if (!res.ok){ editorStatus.textContent = 'Error '+res.status; return; }
+    if (!res.ok){
+      let msg = 'Error '+res.status;
+      try { msg += ' ' + (await res.json()).error; } catch {}
+      editorStatus.textContent = msg;
+      return;
+    }
     const data = await res.json();
     if (data.binary){ editorStatus.textContent = 'Binary file (view not supported)'; editorTextarea.value=''; editorTextarea.disabled=true; }
     else {
