@@ -115,6 +115,26 @@ tar -xzf backpackpi-v0.1.45.tar.gz
 FILE_ROOT=/home/pi PORT=3000 ./run.sh
 ```
 
+### One-Step Systemd Install (automatic)
+
+From within the extracted release directory (as root):
+
+```bash
+sudo ./scripts/install-service.sh
+```
+
+This will:
+1. Copy the bundle to `/opt/backpackpi/app`
+2. Create `/etc/systemd/system/backpackpi-backend.service`
+3. Enable & start the service
+
+Check status:
+
+```bash
+systemctl status backpackpi-backend --no-pager
+journalctl -u backpackpi-backend -f
+```
+
 ### Systemd Unit (optional)
 Create `/etc/systemd/system/backpackpi.service`:
 ```ini

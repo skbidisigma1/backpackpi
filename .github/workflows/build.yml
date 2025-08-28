@@ -36,6 +36,7 @@ jobs:
           mkdir release
           cp -r dist release/dist
           cp -r server release/server
+          cp -r scripts release/scripts
           cp package.json package-lock.json release/
           # lightweight README subset for device deploy (optional)
           cp README.md release/
