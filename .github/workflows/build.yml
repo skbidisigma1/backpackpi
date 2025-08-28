@@ -29,12 +29,33 @@ jobs:
         with:
           name: dist
           path: dist
-      - name: Package archives
+      - name: Prepare release directory
         run: |
           VERSION=${GITHUB_REF_NAME}
           [ -z "$VERSION" ] && VERSION=dev
-          tar -C dist -czf backpackpi-${VERSION}.tar.gz .
-          zip -q -r backpackpi-${VERSION}.zip dist
+          mkdir release
+          cp -r dist release/dist
+          cp -r server release/server
+          cp package.json package-lock.json release/
+          # lightweight README subset for device deploy (optional)
+          cp README.md release/
+          echo 'PORT=3000' > release/.env.example
+          cat > release/run.sh <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          DIR="$(cd "$(dirname "$0")" && pwd)"
+          cd "$DIR"
+          if [ ! -d node_modules ]; then
+            echo "[run.sh] Installing dependencies..."
+            npm ci --only=production || npm ci
+          fi
+          export FILE_ROOT="${FILE_ROOT:-$DIR}"
+          export PORT="${PORT:-3000}"
+            node server/index.js
+          EOF
+          chmod +x release/run.sh
+          tar -C release -czf backpackpi-${VERSION}.tar.gz .
+          (cd release && zip -q -r ../backpackpi-${VERSION}.zip .)
           sha256sum backpackpi-${VERSION}.tar.gz backpackpi-${VERSION}.zip > SHA256SUMS
       - name: Verify dist
         if: startsWith(github.ref, 'refs/tags/')

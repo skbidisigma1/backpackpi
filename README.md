@@ -1,9 +1,10 @@
-# Backpack Pi Frontend (Skeleton)
+# Backpack Pi (Frontend + Lightweight Backend)
 
-Minimal, extensible headless UI shell for a Raspberry Pi Zero 2 W.
+Minimal, extensible headless UI + file management backend for a Raspberry Pi Zero 2 W.
 
 ## Structure
-```
+
+```text
 frontend/
   index.html          # Shell + nav
   assets/
@@ -11,7 +12,6 @@ frontend/
     fonts/Miracode.woff2
   js/
     app.js            # Entry: theme, router init, SW registration
-    router.js         # Hash router
     store.js          # Tiny pub/sub store
     components/
       toast.js        # Toast notifications
@@ -20,55 +20,67 @@ frontend/
       files.js
       games.js
       proxy.js
-      settings.js
-  sw.js               # Service worker for shell/font caching
-```
-
+  index.js            # Express server (static + file API)
+  routes/
+    files.js          # File operations (list, mkdir, rename, delete, download)
 ## Design Tokens
 Defined in `assets/styles.css` root: typography scale, spacing, radii, color system (light + dark). Theme toggled via `data-theme` attribute on `<html>`.
-
-## Service Worker / Caching
-- Pre-caches shell assets + font.
 - Runtime cache fill for other requests (network-first fallback).
 - Increment `CACHE_NAME` in `sw.js` when changing asset set.
 
-## Adding Backend APIs
-Example endpoints (to implement separately):
-- `GET /api/status` -> dashboard metrics (push updates via WebSocket later)
-- `GET /api/files?path=` -> file listing
-- `GET /api/games` -> list games
+## Backend APIs
+Currently implemented:
+- `GET /api/files?path=/sub/path` – list directory (with `showHidden=1`)
+- `POST /api/files/mkdir` – create directory `{ path, name }`
+- `POST /api/files/rename` – rename `{ path, newName }`
+- `DELETE /api/files?path=/path/file` – remove file/dir (recursive)
+- `GET /api/files/download?path=/path/file` – stream download
+- `GET /api/health` – simple health probe
+
+Planned / future:
+- `POST /api/files/upload` – upload file(s)
+- `GET /api/status` – system metrics
+- WebSocket push updates
 
 ## Extending Routes
 Add a new module file in `js/modules/` exporting `render(root)` and extend conditional import block in `app.js` (or refactor to a registry map).
 
 ## Development
 
-Serve the `frontend/` directory with a static server so SW + modules function:
-
+Run backend + serve frontend (preferred):
 ```bash
-# Example (Python 3)
-python -m http.server 8000 -d frontend
-```
+npm install
+npm run dev           # or: node server/index.js
+open http://localhost:3000/
+Just rebuild frontend assets:
+```bash
 
-Navigate to: http://localhost:8000/
+If you strictly want static only (no API) you can still do:
+```bash
+python -m http.server 8000 -d dist
+```
+But the Files view will not work without the backend.
 
 ## Build / Release (CI)
 
-Node-based build pipeline (esbuild + csso + html-minifier) produces a `dist/` folder:
+The GitHub Actions workflow now packages BOTH:
+  - `dist/` (minified frontend)
+  - `server/` + `package.json` + `package-lock.json` + `run.sh`
 
+On tag push (`v*`) it creates release archives:
+  - `backpackpi-vX.Y.Z.tar.gz` / `.zip` (full deployable bundle)
+  - `SHA256SUMS`
+
+Tag & push to release:
 ```bash
-npm install
+git tag v0.1.45
+git push origin v0.1.45
+```
+
+Locally build only:
+```bash
 npm run build
 ```
-
-GitHub Actions workflow builds on every push to `main` and when a tag matching `v*` is pushed it will create a GitHub Release attaching the minified `dist` artifact. To publish a new release locally:
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-The workflow then minifies assets and uploads them to the release automatically.
 
 ## Theming
 Toggle uses localStorage `theme`. Add more theme variables by extending `:root` and `[data-theme=dark]` sections.
@@ -79,13 +91,62 @@ Toggle uses localStorage `theme`. Add more theme variables by extending `:root` 
 ## Accessibility
 Focus ring via `:focus-visible`. Main region gets focus after route change for screen readers.
 
+## Deployment on Pi
+
+1. Download latest release (tar or zip) to target directory, e.g. `/opt/backpackpi`:
+
+```bash
+mkdir -p /opt/backpackpi && cd /opt/backpackpi
+curl -LO https://github.com/skbidisigma1/backpackpi/releases/download/v0.1.45/backpackpi-v0.1.45.tar.gz
+tar -xzf backpackpi-v0.1.45.tar.gz
+```
+
+2. (First run) Install production deps & start:
+
+```bash
+./run.sh
+```
+
+3. Access UI at: `http://<pi-ip>:3000/`
+
+4. Override root directory for file browser:
+
+```bash
+FILE_ROOT=/home/pi PORT=3000 ./run.sh
+```
+
+### Systemd Unit (optional)
+Create `/etc/systemd/system/backpackpi.service`:
+```ini
+[Unit]
+Description=Backpack Pi
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/backpackpi
+Environment=FILE_ROOT=/opt/backpackpi
+ExecStart=/usr/bin/env bash /opt/backpackpi/run.sh
+Restart=on-failure
+User=pi
+Group=pi
+
+[Install]
+WantedBy=multi-user.target
+```
+Enable:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now backpackpi
+```
+
 ## Next Steps
-1. Implement mock status update loop (or WebSocket client).
-2. Build actual file browser with backend.
-3. Introduce registry-based routing (cleaner than if/else chain).
-4. Convert additional font weights if needed.
-5. Add offline fallback page in SW.
-6. Add error boundary wrapper for dynamic imports.
+1. Upload endpoint (multi-part) + progress bar.
+2. Status metrics (CPU, RAM) endpoint.
+3. Registry-based module loading map.
+4. Offline fallback page in SW.
+5. Error boundary wrapper for dynamic imports.
+6. Auth / session hardening.
 
 ## License
 (Define project license here.)
