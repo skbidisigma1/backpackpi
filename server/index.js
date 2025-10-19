@@ -1,15 +1,53 @@
 import express from 'express';
+import session from 'express-session';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import filesRouter from './routes/files.js';
+import authRouter from './routes/auth.js';
+import { ensureSudoUser } from './db/roles.js';
+import { requireViewer } from './middleware/auth.js';
 import { readFileSync } from 'fs';
+import BetterSqlite3Store from 'better-sqlite3-session-store';
+import Database from 'better-sqlite3';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Initialize sudo user (lukec309)
+const SUDO_USER = process.env.SUDO_USER || 'lukec309';
+ensureSudoUser(SUDO_USER);
+
 const app = express();
 app.use(express.json({ limit: '2mb' }));
+
+// Session configuration
+const sessionDbPath = process.env.DATA_DIR 
+  ? path.join(process.env.DATA_DIR, 'sessions.db')
+  : path.join(process.cwd(), 'sessions.db');
+
+const SessionStore = BetterSqlite3Store(session);
+const sessionDb = new Database(sessionDbPath);
+
+app.use(session({
+  store: new SessionStore({
+    client: sessionDb,
+    expired: {
+      clear: true,
+      intervalMs: 15 * 60 * 1000 // cleanup every 15 minutes
+    }
+  }),
+  secret: process.env.SESSION_SECRET || 'backpackpi-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  name: 'backpackpi.sid',
+  cookie: {
+    maxAge: 14 * 24 * 60 * 60 * 1000, // 14 days
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production' && process.env.HTTPS === 'true',
+    sameSite: 'lax'
+  }
+}));
 
 // Configurable root directory for file browser
 const ROOT_DIR = process.env.FILE_ROOT || path.resolve(process.cwd());
@@ -25,10 +63,11 @@ app.use((req,res,next)=>{
 });
 
 // API routes
+app.use('/api/auth', authRouter);
 app.use('/api/files', filesRouter);
 
-app.get('/api/health', (req,res)=>{ res.json({ ok:true, time: Date.now() }); });
-app.get('/api/version', (req,res)=>{
+app.get('/api/health', requireViewer, (req,res)=>{ res.json({ ok:true, time: Date.now() }); });
+app.get('/api/version', requireViewer, (req,res)=>{
   let version = 'unknown';
   try {
     const pkg = JSON.parse(readFileSync(path.join(process.cwd(),'package.json'),'utf8'));

@@ -4,6 +4,7 @@ import fssync from 'fs';
 import path from 'path';
 import mime from 'mime-types';
 import { safeJoin, normalizePath } from '../util/path.js';
+import { requireViewer, requireAdmin } from '../middleware/auth.js';
 
 const MAX_EDIT_SIZE = 512 * 1024; // 512 KB safety limit for inline editor
 
@@ -31,7 +32,7 @@ router.use((req,res,next)=>{
   next();
 });
 
-router.get('/', async (req,res,next)=>{
+router.get('/', requireViewer, async (req,res,next)=>{
   try {
     const rel = (req.query.path || '/');
     const showHidden = req.query.showHidden === '1';
@@ -63,7 +64,7 @@ router.get('/', async (req,res,next)=>{
   } catch (e) { next(e); }
 });
 
-router.get('/download', async (req,res,next)=>{
+router.get('/download', requireViewer, async (req,res,next)=>{
   try {
     const rel = req.query.path; if (!rel) return res.status(400).json({ error:'Missing path' });
     const abs = safeJoin(getRoot(req), rel);
@@ -76,7 +77,7 @@ router.get('/download', async (req,res,next)=>{
   } catch (e){ next(e); }
 });
 
-router.post('/mkdir', async (req,res,next)=>{
+router.post('/mkdir', requireAdmin, async (req,res,next)=>{
   try {
     const { path: rel, name } = req.body || {};
     if (!name || /[\0\n\r/]/.test(name)) return res.status(400).json({ error:'Invalid name'});
@@ -87,7 +88,7 @@ router.post('/mkdir', async (req,res,next)=>{
   } catch (e){ next(e); }
 });
 
-router.post('/rename', async (req,res,next)=>{
+router.post('/rename', requireAdmin, async (req,res,next)=>{
   try {
     const { path: rel, newName } = req.body || {};
     if (!rel || !newName) return res.status(400).json({ error:'Missing params' });
@@ -99,7 +100,7 @@ router.post('/rename', async (req,res,next)=>{
   } catch (e){ next(e); }
 });
 
-router.delete('/', async (req,res,next)=>{
+router.delete('/', requireAdmin, async (req,res,next)=>{
   try {
     const rel = req.query.path; if (!rel) return res.status(400).json({ error:'Missing path'});
     const abs = safeJoin(getRoot(req), rel);
@@ -110,7 +111,7 @@ router.delete('/', async (req,res,next)=>{
 });
 
 // Fetch file content (text only)
-router.get('/content', async (req,res,next)=>{
+router.get('/content', requireViewer, async (req,res,next)=>{
   try {
     const rel = req.query.path; if (!rel) return res.status(400).json({ error:'Missing path'});
     const root = getRoot(req);
@@ -127,7 +128,7 @@ router.get('/content', async (req,res,next)=>{
 });
 
 // Overwrite file content
-router.post('/write', async (req,res,next)=>{
+router.post('/write', requireAdmin, async (req,res,next)=>{
   try {
     const { path: rel, content } = req.body || {};
     if (!rel || typeof content !== 'string') return res.status(400).json({ error:'Missing params'});
@@ -143,7 +144,7 @@ router.post('/write', async (req,res,next)=>{
 });
 
 // Debug: resolve a path without reading (helps diagnose 404)
-router.get('/debug/resolve', (req,res)=>{
+router.get('/debug/resolve', requireViewer, (req,res)=>{
   const rel = req.query.path || '/';
   try {
     const root = getRoot(req);

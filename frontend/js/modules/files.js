@@ -14,20 +14,13 @@ function fmtSize(bytes){
   return (i===0? n : n.toFixed(1)) + ' ' + units[i];
 }
 
+import { apiFetch, apiJSON } from '../../api.js';
+
 async function fetchList(){
   state.loading = true; renderTable();
-  const base = window.API_BASE || '';
-  const url = `${base}/api/files?path=${encodeURIComponent(state.path)}${state.showHidden?'&showHidden=1':''}`;
+  const qp = `?path=${encodeURIComponent(state.path)}${state.showHidden?'&showHidden=1':''}`;
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const ct = res.headers.get('Content-Type') || '';
-    if (!ct.includes('application/json')){
-      const text = await res.text();
-      console.error('Non-JSON response for', url, 'first 200 chars =>', text.slice(0,200));
-  throw new Error('Unexpected non-JSON response. Ensure backend reachable at ' + (base||'(same origin)'));
-    }
-    const data = await res.json(); // safe now
+    const data = await apiJSON('/files'+qp, { headers:{ 'Accept':'application/json' } });
     state.path = data.path;
     state.entries = data.entries.sort((a,b)=> (a.type===b.type? a.name.localeCompare(b.name): a.type==='dir'?-1:1));
     state.selection.clear();
@@ -50,8 +43,7 @@ function navTo(entry){
 async function mkdir(){
   const name = prompt('New folder name');
   if (!name) return;
-  const base = window.API_BASE || '';
-  const res = await fetch(`${base}/api/files/mkdir`,{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: state.path, name }) });
+  const res = await apiFetch('/files/mkdir',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: state.path, name }) });
   if (res.ok) { fetchList(); } else window.pushToast?.('mkdir failed',{variant:'danger'});
 }
 
@@ -60,32 +52,15 @@ async function rename(){
   const entry = state.entries.find(e=> state.selection.has(e.name));
   const newName = prompt('Rename to', entry.name); if (!newName || newName===entry.name) return;
   const rel = (state.path==='/'? '' : state.path) + '/' + entry.name;
-  const base = window.API_BASE || '';
-  const res = await fetch(`${base}/api/files/rename`,{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: rel, newName }) });
+  const res = await apiFetch('/files/rename',{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: rel, newName }) });
   if (res.ok) fetchList(); else window.pushToast?.('rename failed',{variant:'danger'});
 }
 
 async function del(){
-    if (!res.ok){
-      let msg = 'Error '+res.status;
-      try { msg += ' ' + (await res.json()).error; } catch {}
-      editorStatus.textContent = msg;
-      if (res.status === 404){
-        // Perform debug resolve
-        try {
-          const dbgRes = await fetch(`${base}/api/files/debug/resolve?path=${encodeURIComponent(rel)}`);
-          const dbg = await dbgRes.json();
-          console.warn('[file-debug]', dbg);
-          window.pushToast?.('Debug: ' + JSON.stringify(dbg), { variant:'danger'});
-        } catch(e){ console.warn('debug resolve failed', e); }
-      }
-      return;
-    }
   if (!confirm(`Delete ${state.selection.size} item(s)?`)) return;
   for (const name of state.selection){
     const rel = (state.path==='/'? '' : state.path) + '/' + name;
-    const base = window.API_BASE || '';
-    await fetch(`${base}/api/files?path=${encodeURIComponent(rel)}`, { method:'DELETE' });
+    try { await apiFetch(`/files?path=${encodeURIComponent(rel)}`, { method:'DELETE' }); } catch (e){ console.warn('Delete failed', rel, e); }
   }
   fetchList();
 }
@@ -98,8 +73,7 @@ function downloadSelected(){
     if (entry?.type==='file'){
       const rel = (state.path==='/'? '' : state.path) + '/' + entry.name;
       const a = document.createElement('a');
-      const base = window.API_BASE || '';
-      a.href = `${base}/api/files/download?path=${encodeURIComponent(rel)}`;
+  a.href = `/api/files/download?path=${encodeURIComponent(rel)}`; // plain navigation ok
       a.download = entry.name;
       document.body.appendChild(a); a.click(); a.remove();
     }
@@ -151,12 +125,12 @@ function renderTable(){
 
 async function openFile(name){
   const rel = (state.path==='/'? '' : state.path) + '/' + name;
-  const base = window.API_BASE || '';
+  // API base is same-origin
   editorStatus.textContent = 'Loading...';
   editorWrap.style.display='block';
   editorTextarea.disabled = true;
   try {
-    const res = await fetch(`${base}/api/files/content?path=${encodeURIComponent(rel)}`);
+  const res = await apiFetch(`/files/content?path=${encodeURIComponent(rel)}`);
     if (!res.ok){
       let msg = 'Error '+res.status;
       try { msg += ' ' + (await res.json()).error; } catch {}
@@ -178,9 +152,8 @@ async function openFile(name){
 async function saveFile(){
   const rel = editorTextarea.dataset.path; if (!rel) return;
   editorStatus.textContent = 'Saving...';
-  const base = window.API_BASE || '';
   try {
-    const res = await fetch(`${base}/api/files/write`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: rel, content: editorTextarea.value }) });
+    const res = await apiFetch(`/files/write`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: rel, content: editorTextarea.value }) });
     if (!res.ok){ editorStatus.textContent = 'Save failed ('+res.status+')'; return; }
     const data = await res.json();
     editorStatus.textContent = 'Saved ('+fmtSize(data.size)+')';
@@ -196,8 +169,7 @@ export async function render(root){
     <div class="card" style="display:none;" data-api-warning>
       <strong>Backend unreachable</strong>
       <p style="margin-top:var(--space-2); font-size:.9rem; line-height:1.4">The files API responded with HTML instead of JSON.<br>
-      Verify the Node server is running and accessible at <code>${(window.API_BASE||'(same-origin)')||''}</code>.<br>
-      If the backend uses a different host/port, inject <code>&lt;script&gt;window.API_BASE='http://host:port'&lt;/script&gt;</code> before <code>app.js</code>.</p>
+  Verify the Node server is running and accessible at <code>/api</code> (same origin).</p>
     </div>
     <div class="card" id="file-browser">
       <div class="row" style="justify-content:space-between; align-items:center; gap:var(--space-4); flex-wrap:wrap;">

@@ -15,6 +15,11 @@ __pycache__/
 .env
 .venv/
 
+# Database files
+*.db
+*.db-shm
+*.db-wal
+
 # Editor
 .idea/
 .vscode/
