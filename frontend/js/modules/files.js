@@ -14,7 +14,7 @@ function fmtSize(bytes){
   return (i===0? n : n.toFixed(1)) + ' ' + units[i];
 }
 
-import { apiFetch, apiJSON } from '../../api.js';
+import { apiFetch, apiJSON } from '../api.js';
 
 async function fetchList(){
   state.loading = true; renderTable();
