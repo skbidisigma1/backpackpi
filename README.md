@@ -200,6 +200,17 @@ FILE_ROOT=/home/pi PORT=3000 ./run.sh
 
 From within the extracted release directory (as root):
 
+Note on Windows / local development
+----------------------------------
+
+The PAM binding (`authenticate-pam`) is an optional dependency and may fail to build on Windows. To allow development on Windows or environments without PAM, the project supports a development fallback:
+
+- Set `DEV_AUTH=true` to enable the fallback authentication mode.
+- Optionally set `DEV_AUTH_PASSWORD` to require a shared password during development.
+
+Disable `DEV_AUTH` in production. On Raspberry Pi (Linux), PAM will be used by default.
+
+
 ```bash
 sudo ./scripts/install-service.sh
 ```

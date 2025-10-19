@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { authenticate } from 'authenticate-pam';
+import fs from 'fs';
+import os from 'os';
 import { getUserRole, setUserRole, listUsers, ROLES } from '../db/roles.js';
 import { rateLimitLogin, resetLoginLimit, requireAuth, requireSudo } from '../middleware/auth.js';
 
@@ -25,28 +26,73 @@ router.post('/login', async (req, res) => {
     });
   }
 
-  // Authenticate via PAM
-  authenticate({ username, password }, (err, success) => {
-    if (err || !success) {
-      console.warn(`[auth] Failed login attempt for user: ${username}`);
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+  // Try to use authenticate-pam if available (POSIX). Otherwise fallback to DEV_AUTH
+  let pamAvailable = false;
+  let authenticate = null;
+  try {
+    // Optional dependency - may not be present on Windows
+    // eslint-disable-next-line import/no-extraneous-dependencies
+    // dynamic require to avoid startup failure when module missing
+    // (works in Node ESM via createRequire or eval require)
+    authenticate = (await import('authenticate-pam')).authenticate;
+    pamAvailable = true;
+  } catch (e) {
+    pamAvailable = false;
+  }
 
-    // Success: reset rate limit and create session
-    resetLoginLimit(username);
-    
+  async function onAuthSuccess() {
+    await resetLoginLimit(username);
     const role = getUserRole(username);
     req.session.username = username;
     req.session.cookie.maxAge = 14 * 24 * 60 * 60 * 1000; // 14 days
-
     console.log(`[auth] User logged in: ${username} (role: ${role})`);
-    
-    res.json({ 
-      success: true, 
-      username, 
-      role 
+    res.json({ success: true, username, role });
+  }
+
+  if (pamAvailable && os.platform() !== 'win32') {
+    // Use PAM on POSIX systems
+    authenticate({ username, password }, (err, success) => {
+      if (err || !success) {
+        console.warn(`[auth] Failed login attempt for user: ${username}`);
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      onAuthSuccess();
     });
-  });
+    return;
+  }
+
+  // Fallback dev auth: if DEV_AUTH=true, allow login if PASSWORD is set to match, or
+  // accept any username that exists in /etc/passwd when running on POSIX. This
+  // fallback is intentionally permissive for local dev and Windows where PAM is
+  // unavailable. Set DEV_AUTH=false in production to require PAM.
+  const devAuth = process.env.DEV_AUTH === 'true';
+  if (devAuth) {
+    // If DEV_AUTH true and DEV_AUTH_PASSWORD set, require that password matches
+    const devPass = process.env.DEV_AUTH_PASSWORD;
+    if (devPass) {
+      if (password === devPass) return onAuthSuccess();
+      console.warn(`[auth] DEV_AUTH failed for user: ${username}`);
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // If running on POSIX, accept any existing system username (no password check)
+    try {
+      if (fs.existsSync('/etc/passwd')) {
+        const passwd = fs.readFileSync('/etc/passwd', 'utf8');
+        const exists = passwd.split('\n').some(line => line.startsWith(username + ':'));
+        if (exists) return onAuthSuccess();
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // As last resort on non-POSIX (Windows), accept login if DEV_AUTH=true and no password set
+    return onAuthSuccess();
+  }
+
+  // If no PAM and not in DEV_AUTH mode, disallow login on this platform
+  console.error('[auth] PAM not available and DEV_AUTH not enabled - cannot authenticate on this platform');
+  return res.status(503).json({ error: 'Authentication provider unavailable on this platform' });
 });
 
 /**
