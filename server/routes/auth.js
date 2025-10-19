@@ -6,6 +6,19 @@ import { rateLimitLogin, resetLoginLimit, requireAuth, requireSudo } from '../mi
 
 const router = Router();
 
+// Try to load authenticate-pam at module load time (optional dependency)
+let authenticate = null;
+let pamAvailable = false;
+try {
+  const pamModule = await import('authenticate-pam');
+  authenticate = pamModule.authenticate;
+  pamAvailable = true;
+  console.log('[auth] PAM authentication available');
+} catch (e) {
+  console.log('[auth] PAM not available, using fallback auth');
+  pamAvailable = false;
+}
+
 /**
  * POST /api/auth/login
  * Authenticate against PAM with username/password
@@ -24,20 +37,6 @@ router.post('/login', async (req, res) => {
       error: 'Too many failed login attempts', 
       retryAfter: rateLimit.retryAfter 
     });
-  }
-
-  // Try to use authenticate-pam if available (POSIX). Otherwise fallback to DEV_AUTH
-  let pamAvailable = false;
-  let authenticate = null;
-  try {
-    // Optional dependency - may not be present on Windows
-    // eslint-disable-next-line import/no-extraneous-dependencies
-    // dynamic require to avoid startup failure when module missing
-    // (works in Node ESM via createRequire or eval require)
-    authenticate = (await import('authenticate-pam')).authenticate;
-    pamAvailable = true;
-  } catch (e) {
-    pamAvailable = false;
   }
 
   async function onAuthSuccess() {
